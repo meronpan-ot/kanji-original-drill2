@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>漢字ドリルメーカー</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Zen Maru Gothic', sans-serif; 
+            background-color: #f8fafc;
+            color: #334155;
+        }
+        
+        .print-page {
+            width: 210mm;
+            height: 296mm; 
+            padding: 10mm 15mm;
+            margin: 20px auto;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            box-sizing: border-box;
+            page-break-after: always;
+        }
+
+        .print-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            height: 25mm;
+            margin-bottom: 5mm;
+            padding-bottom: 5mm;
+            border-bottom: 2px solid #64748b;
+        }
+        .header-date { width: 35%; font-size: 16px; font-weight: bold; color: #475569; }
+        .header-name { width: 45%; font-size: 16px; text-align: right; font-weight: bold; color: #475569; }
+        .underline-box {
+            display: inline-block;
+            border-bottom: 2px solid #94a3b8;
+            min-width: 40px;
+        }
+
+        .question-grid {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            height: calc(296mm - 45mm);
+        }
+
+        .question-box {
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            height: 9.5%; 
+            margin-bottom: 0.5%;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .sentence-display {
+            font-size: 1.6rem;
+            line-height: 1.2;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            flex-grow: 1;
+            color: #1e293b;
+        }
+
+        .q-underline {
+            border-bottom: 3px solid #334155;
+            padding: 0 8px;
+            margin: 0 5px;
+            position: relative;
+            font-weight: bold;
+            min-width: 4rem;
+            text-align: center;
+            display: inline-block;
+        }
+
+        .q-ruby {
+            position: absolute;
+            top: -1.0rem;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.9rem;
+            white-space: nowrap;
+            font-weight: bold;
+            color: #475569;
+        }
+
+        .ans-area {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            min-width: 150px;
+        }
+
+        .ans-line {
+            width: 150px;
+            border-bottom: 2px solid #64748b;
+            height: 40px;
+        }
+
+        @media print {
+            @page { size: A4; margin: 0; }
+            .no-print { display: none !important; }
+            body { background: white; margin: 0; padding: 0; }
+            .print-page { margin: 0; border: none; box-shadow: none; width: 210mm; height: 297mm; }
+        }
+
+        details summary { cursor: pointer; list-style: none; outline: none; }
+        details[open] summary span.arrow { transform: rotate(180deg); }
+        #help-popover {
+            position: fixed; bottom: 85px; right: 20px; width: 320px;
+            background: white; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            display: none; z-index: 100; border: 1px solid #e2e8f0; padding: 20px;
+        }
+    </style>
+</head>
+<body class="pb-20">
+
+    <div class="no-print max-w-5xl mx-auto p-6">
+        <header class="mb-8 text-center md:text-left">
+            <h1 class="text-3xl font-bold text-slate-700">📝 漢字ドリルメーカー</h1>
+        </header>
+
+        <div class="bg-white p-6 rounded-2xl shadow-md border border-slate-200 mb-6 space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
+                <div class="space-y-2 lg:col-span-2">
+                    <label class="block text-sm font-bold text-slate-600">① Excel/CSV 読み込み</label>
+                    <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" 
+                           class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer"/>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold text-slate-600">② 問題数</label>
+                    <input type="number" id="question-count" value="10" min="1" max="100" 
+                           class="w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-sky-500 font-bold text-slate-700">
+                </div>
+                <button onclick="importExcel()" class="bg-sky-600 text-white px-4 py-3 rounded-xl font-bold shadow-lg hover:bg-sky-700 transition">
+                    読み込んだファイルから問題を生成
+                </button>
+            </div>
+            
+            <div class="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-100">
+                <div class="flex bg-slate-200 p-1 rounded-xl">
+                    <button onclick="setMode('read')" id="btn-read" class="px-6 py-2 rounded-lg text-sm font-bold bg-white shadow-sm text-sky-600">読みとり</button>
+                    <button onclick="setMode('write')" id="btn-write" class="px-6 py-2 rounded-lg text-sm font-bold text-slate-500">書きとり</button>
+                </div>
+                <div class="flex gap-4">
+                    <button onclick="shuffleQuestions()" class="bg-amber-100 text-amber-700 px-6 py-2 rounded-xl text-sm font-bold border border-amber-200 hover:bg-amber-200 transition">
+                        🔀 シャッフル
+                    </button>
+                    <button onclick="window.print()" class="bg-emerald-500 text-white px-8 py-2 rounded-xl font-bold shadow-lg hover:bg-emerald-600 transition">
+                        🖨️ 印刷する
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-3 mb-8">
+            <details class="bg-slate-50 border border-slate-200 rounded-2xl group overflow-hidden">
+                <summary class="p-4 font-bold text-slate-600 text-sm flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="bg-sky-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
+                        Excelファイルの作り方を確認する
+                    </div>
+                    <span class="arrow transition-transform duration-300 text-slate-400">▼</span>
+                </summary>
+                <div class="p-5 pt-0 border-t border-slate-200/50">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs mt-4 text-slate-600 leading-relaxed">
+                        <div class="bg-white p-3 rounded-lg border border-slate-200">
+                            <p class="font-bold text-sky-600 mb-1">A列：漢字（単語）</p>
+                            <p>問題にしたい漢字を入力します。</p>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg border border-slate-200">
+                            <p class="font-bold text-sky-600 mb-1">B列：文章</p>
+                            <p>A列の漢字を含めた文章を入力します。<br>例：A列に[山]なら「山にのぼる」。<br><strong>※A列の漢字が自動で問題になります。</strong></p>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg border border-slate-200">
+                            <p class="font-bold text-sky-600 mb-1">C列：ふりがな</p>
+                            <p>「書きとり」で使用するふりがなです。</p>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="bg-slate-50 border border-slate-200 rounded-2xl group overflow-hidden">
+                <summary class="p-4 font-bold text-slate-600 text-sm flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="bg-emerald-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
+                        手動で問題を作成する（編集する）方法
+                    </div>
+                    <span class="arrow transition-transform duration-300 text-slate-400">▼</span>
+                </summary>
+                <div class="p-5 pt-0 border-t border-slate-200/50 text-xs text-slate-600 mt-4 leading-relaxed">
+                    <p class="font-bold mb-1">手順:</p>
+                    <p>問題にしたい部分を <span class="bg-amber-100 text-amber-700 px-1 rounded font-bold">[ ]</span> で囲みます。例：[青い]空が見える</p>
+                </div>
+            </details>
+        </div>
+
+        <div id="input-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"></div>
+        <button onclick="addQuestion()" class="w-full py-4 border-2 border-dashed border-slate-300 rounded-2xl text-slate-400 font-bold hover:bg-slate-50 transition">＋ 新しい問題を追加</button>
+    </div>
+
+    <div class="fixed bottom-6 right-6 no-print flex flex-col items-end">
+        <div id="help-popover">
+            <h3 class="font-bold text-slate-700 mb-3 border-bottom pb-2">🚀 つかいかた</h3>
+            <div class="text-xs space-y-4 text-slate-600">
+                <div><p class="font-bold text-sky-600">1. モードを選ぶ</p>「読みとり/書きとり」を切り替えます。</div>
+                <div><p class="font-bold text-sky-600">2. 問題を作る</p>入力欄で [] を使って問題箇所を指定。</div>
+                <div><p class="font-bold text-sky-600">3. 印刷</p>「印刷する」ボタンでA4出力！</div>
+            </div>
+            <button onclick="toggleHelp()" class="mt-4 w-full py-2 bg-slate-100 rounded-lg text-xs font-bold">とじる</button>
+        </div>
+        <button onclick="toggleHelp()" class="w-14 h-14 bg-slate-800 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl">？</button>
+    </div>
+
+    <div id="print-preview-container"></div>
+
+    <script>
+        let currentMode = 'read';
+        let questions = [{ text: '', reading: '' }];
+
+        function toggleHelp() {
+            const popover = document.getElementById('help-popover');
+            popover.style.display = popover.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('btn-read').className = mode === 'read' ? 'px-6 py-2 rounded-lg text-sm font-bold bg-white shadow-sm text-sky-600' : 'px-6 py-2 rounded-lg text-sm font-bold text-slate-500';
+            document.getElementById('btn-write').className = mode === 'write' ? 'px-6 py-2 rounded-lg text-sm font-bold bg-white shadow-sm text-sky-600' : 'px-6 py-2 rounded-lg text-sm font-bold text-slate-500';
+            renderPreview();
+        }
+
+        function importExcel() {
+            const fileInput = document.getElementById('excel-file');
+            const count = parseInt(document.getElementById('question-count').value) || 10;
+            if (!fileInput.files[0]) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                let allData = jsonData.filter(row => row.length >= 2).map(row => {
+                    const kanji = String(row[0] || "");
+                    let sentence = String(row[1] || "");
+                    if (!sentence.includes('[') && kanji !== "" && sentence.includes(kanji)) {
+                        sentence = sentence.replace(kanji, `[${kanji}]`);
+                    }
+                    return { text: sentence, reading: String(row[2] || "") };
+                });
+                questions = allData.slice(0, count);
+                render();
+            };
+            reader.readAsArrayBuffer(fileInput.files[0]);
+        }
+
+        function shuffleQuestions() {
+            questions.sort(() => Math.random() - 0.5);
+            render();
+        }
+
+        function addQuestion() {
+            questions.push({ text: '', reading: '' });
+            render();
+        }
+
+        function updateData(index, key, value) {
+            questions[index][key] = value;
+            renderPreview();
+        }
+
+        function renderInputs() {
+            const container = document.getElementById('input-container');
+            container.innerHTML = '';
+            questions.forEach((q, i) => {
+                const div = document.createElement('div');
+                div.className = 'bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3';
+                div.innerHTML = `
+                    <div class="flex justify-between items-center text-xs font-bold text-slate-400">
+                        <span>問題 ${i + 1}</span>
+                        <button onclick="questions.splice(${i},1); render();" class="hover:text-rose-400">✕ 削除</button>
+                    </div>
+                    <div class="space-y-2">
+                        <input type="text" placeholder="文章入力 例: [山]に登る" oninput="updateData(${i}, 'text', this.value)" value="${q.text}" class="w-full p-1 border-b border-slate-200 outline-none text-sm font-bold text-slate-700 focus:border-sky-400">
+                        <input type="text" placeholder="ふりがな" oninput="updateData(${i}, 'reading', this.value)" value="${q.reading}" class="w-full p-1 border-b border-slate-200 outline-none text-xs text-sky-600 focus:border-sky-400">
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function parseSentence(text, reading) {
+            const regex = /\[(.*?)\]/;
+            const match = text.match(regex);
+            if (!match) return `<span>${text}</span>`;
+            const parts = text.split(regex);
+            if (currentMode === 'write') {
+                return `<span>${parts[0]}</span><span class="q-underline"><span class="q-ruby">${reading}</span>&nbsp;</span><span>${parts[2] || ''}</span>`;
+            } else {
+                return `<span>${parts[0]}</span><span class="q-underline">${match[1]}</span><span>${parts[2] || ''}</span>`;
+            }
+        }
+
+        function renderPreview() {
+            const container = document.getElementById('print-preview-container');
+            container.innerHTML = '';
+            for (let i = 0; i < questions.length; i += 10) {
+                const chunk = questions.slice(i, i + 10);
+                const page = document.createElement('div');
+                page.className = 'print-page';
+                page.innerHTML = `
+                    <div class="print-header">
+                        <div class="header-date"><span class="underline-box"></span> がつ <span class="underline-box"></span> にち</div>
+                        <div class="header-name">なまえ <span class="underline-box" style="min-width: 220px;"></span></div>
+                    </div>
+                    <div class="question-grid" id="grid-${i}"></div>
+                `;
+                container.appendChild(page);
+                const grid = document.getElementById(`grid-${i}`);
+                chunk.forEach((q, j) => {
+                    const box = document.createElement('div');
+                    box.className = 'question-box';
+                    box.innerHTML = `
+                        <div class="text-[14px] font-bold text-slate-300 w-8">${i + j + 1}</div>
+                        <div class="sentence-display">${parseSentence(q.text, q.reading)}</div>
+                        <div class="ans-area"><div class="ans-line"></div></div>
+                    `;
+                    grid.appendChild(box);
+                });
+            }
+        }
+
+        function render() { renderInputs(); renderPreview(); }
+        render();
+    </script>
+</body>
+</html>
